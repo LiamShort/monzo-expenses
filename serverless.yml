@@ -3,7 +3,6 @@ service: monspenso
 plugins:
   - serverless-pseudo-parameters
   - serverless-step-functions
-
 provider: 
   name: aws
   runtime: python3.6
@@ -83,7 +82,20 @@ stepFunctions:
             Type: Task
             Resource: "arn:aws:lambda:eu-west-1:${self:custom.config.aws_account_id}:function:monspenso-dev-webhook"
             ResultPath: $
-            Next: wait
+            Next: account_id
+
+          account_id:
+            Type: Choice
+            Choices:
+            - Variable: "$.valid"
+              BooleanEquals: true
+              Next: wait
+            - Variable: "$.valid"
+              BooleanEquals: false
+              Next: invalid_account
+          invalid_account:
+            Type: Fail
+            Cause: Invalid Monzo AccountID
           wait:
             Type: Wait
             Seconds: 30
@@ -96,9 +108,13 @@ stepFunctions:
           expense:
             Type: Choice
             Choices:
-            - Variable: "$.monzo.category"
+            - Variable: "$.data.category"
               StringEquals: expenses
               Next: slack
+            Default: "non_expense"
+          non_expense:
+            Type: Fail
+            Cause: Not marked as expense
           slack:
             Type: Task
             Resource: "arn:aws:lambda:eu-west-1:${self:custom.config.aws_account_id}:function:monspenso-dev-slack"

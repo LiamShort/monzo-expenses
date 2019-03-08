@@ -20,8 +20,24 @@ def lambda_handler(event, context):
     )
     
     response_json = (response.json())
+
     monzo_category = response_json["transaction"]["category"]
-    event["monzo"] = {"category": monzo_category, "response": response_json}
+
+    if monzo_category == "expenses":
+        monzo_note = "No Note"
+        if response_json["transaction"]["notes"]:
+            monzo_note = response_json["transaction"]["notes"]
+
+        monzo_receipt = "No Receipt"
+        if response_json["transaction"]["attachments"]:
+            for attachment in response_json["transaction"]["attachments"]:
+                if "file_url" in attachment:
+                    print(attachment["file_url"])
+                    monzo_receipt = attachment["file_url"]
+
+    event["data"]["category"] = monzo_category
+    event["data"]["notes"] = monzo_note
+    event["data"]["attachments"] = monzo_receipt
     
     return(event)
 

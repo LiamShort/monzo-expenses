@@ -12,10 +12,15 @@ def lambda_handler(event, context):
     monzo_account = event["data"]["account_id"]
     
     if monzo_account == monzo_account_id:
-        return (event)
+        return {
+            "data": event["data"], 
+            "valid": True
+        }
         
     else:
-        return (event)
+        return {
+            "valid": False
+        }
 
 def get_secret(key):
 	resp = ssm.get_parameter(

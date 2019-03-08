@@ -15,9 +15,7 @@ channel = os.environ["channel"]
 
 def lambda_handler(event, context):
     
-    response_data = event["monzo"]["response"]
-    
-    monzo_transaction = response_data["transaction"]
+    monzo_transaction = event["data"]
     
     monzo_created_datettime = datetime.datetime.strptime(monzo_transaction["created"], "%Y-%m-%dT%H:%M:%S.%fZ")
 
@@ -26,23 +24,17 @@ def lambda_handler(event, context):
     monzo_amount = float(monzo_amount_original[:monzo_amount_length] + "." + monzo_amount_original[monzo_amount_length:])
     monzo_created = monzo_created_datettime.strftime("%Y/%m/%d")
     monzo_currency = monzo_transaction["local_currency"]
-    
-    
+    monzo_note = monzo_transaction["notes"]
+    monzo_receipt = monzo_transaction["attachments"]
+
     monzo_merchant = "No Merchant"
     monzo_city = "No City"
+    if monzo_transaction["merchant"]:
+        if "name" in monzo_transaction["merchant"]:
+            monzo_merchant = monzo_transaction["merchant"]
 
-    monzo_note = monzo_transaction["notes"]
-    if monzo_note == "":
-        monzo_note = "No Note"
-
-    #monzo_city = monzo_transaction["merchant"]["address"]["city"]
-    #if monzo_city == "":
-        #monzo_city = "No City"
-
-    monzo_receipt = "No Receipt"
-    for attachment in monzo_transaction["attachments"]:
-        if "file_url" in attachment:
-            monzo_receipt = attachment["file_url"]
+        if "address" in monzo_transaction["merchant"]:
+            monzo_city = monzo_transaction["merchant"]["address"]["city"]
     
     slack_message_colour = get_slack_colour(monzo_amount)
     slack_message = create_slack_message(monzo_merchant, monzo_amount, monzo_created, monzo_note, monzo_city, monzo_currency, monzo_receipt, slack_message_colour)
