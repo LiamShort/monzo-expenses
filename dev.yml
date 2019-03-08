@@ -1,0 +1,7 @@
+profile: 
+aws_account_id: 
+region: 
+amount_high: 100
+amount_medium: 40
+channel: 
+slack_webhook: 

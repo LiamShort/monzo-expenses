@@ -1,0 +1,112 @@
+service: monspenso
+
+plugins:
+  - serverless-pseudo-parameters
+  - serverless-step-functions
+
+provider: 
+  name: aws
+  runtime: python3.6
+  region: ${self:custom.config.region}
+  versionFunctions: false
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action:
+        - logs:CreateLogGroup,
+        - logs:PutRetentionPolicy,
+        - logs:CreateLogStream,
+        - logs:PutLogEvents,
+        - logs:DescribeLogStreams,
+        - logs:GetLogEvents
+      Resource: 
+        - "arn:aws:logs:*:*:log-group:/aws/*"
+    - Effect: "Allow"
+      Action:
+        - states:StartExecution
+      Resource: 
+        - "*"
+    - Effect: "Allow"
+      Action:
+        - sts:AssumeRole
+      Resource: 
+        - "*"
+    - Effect: "Allow"
+      Action:
+        - ssm:GetParameter
+      Resource: 
+        - "*"
+
+custom:
+  config: ${file(${self:provider.stage}.yml), file(dev.yml)}
+
+functions: 
+  webhook:
+    handler: monspenso_webhook.lambda_handler
+    description: Retreives Monzo message from API Gateway, if account details are correct invokes state machine.
+    environment: 
+      monzo_account_id: ${ssm:MonzoAccountID}
+    memorySize: 128
+    timeout: 300
+
+  category:
+    handler: monspenso_category.lambda_handler
+    description: Retreives transaction details from Monzo.
+    environment: 
+      monzo_access_key: ${ssm:MonzoAccessKey}
+    memorySize: 128
+    timeout: 300
+  
+  slack:
+    handler: monspenso_slack.lambda_handler
+    description: Creates and sends Slack message containing purchase details. 
+    environment:
+      amount_high: ${self:custom.config.amount_high}
+      amount_medium: ${self:custom.config.amount_medium}
+      channel: ${self:custom.config.channel}
+      slack_webhook: ${self:custom.config.slack_webhook}
+    memorySize: 128
+    timeout: 300
+
+stepFunctions:
+  stateMachines:
+    MonzoTransactions:
+      events:
+        - http:
+            path: test/monspenso_webhook
+            method: POST
+      name: MonzoTransactions
+      definition:
+        Comment: "Monspenso Application"
+        StartAt: webhook
+        States:
+          webhook:
+            Type: Task
+            Resource: "arn:aws:lambda:eu-west-1:${self:custom.config.aws_account_id}:function:monspenso-dev-webhook"
+            ResultPath: $
+            Next: wait
+          wait:
+            Type: Wait
+            Seconds: 30
+            Next: category
+          category:
+            Type: Task
+            Resource: "arn:aws:lambda:eu-west-1:${self:custom.config.aws_account_id}:function:monspenso-dev-category"
+            ResultPath: $
+            Next: expense
+          expense:
+            Type: Choice
+            Choices:
+            - Variable: "$.monzo.category"
+              StringEquals: expenses
+              Next: slack
+          slack:
+            Type: Task
+            Resource: "arn:aws:lambda:eu-west-1:${self:custom.config.aws_account_id}:function:monspenso-dev-slack"
+            ResultPath: $
+            End: true
+
+  Outputs:
+    MonzoTransactions:
+      Description: The ARN of the example state machine
+      Value:
+        Ref: MonzoTransactions
