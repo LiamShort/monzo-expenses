@@ -1,14 +1,7 @@
-# amount_high
-# amount_medium
-# channel
-# slack_webhook
-
 import json
 import os
 import datetime
-from botocore.vendored import requests
 
-slack_webhook = os.environ["slack_webhook"]
 amount_high = os.environ["amount_high"]
 amount_medium = os.environ["amount_medium"]
 channel = os.environ["channel"]
@@ -31,39 +24,42 @@ def lambda_handler(event, context):
     monzo_city = "No City"
     if monzo_transaction["merchant"]:
         if "name" in monzo_transaction["merchant"]:
-            monzo_merchant = monzo_transaction["merchant"]
+            monzo_merchant = monzo_transaction["merchant"]["name"]
 
         if "address" in monzo_transaction["merchant"]:
             monzo_city = monzo_transaction["merchant"]["address"]["city"]
     
-    slack_message_colour = get_slack_colour(monzo_amount)
-    slack_message = create_slack_message(monzo_merchant, monzo_amount, monzo_created, monzo_note, monzo_city, monzo_currency, monzo_receipt, slack_message_colour)
-    send_slack_notification(slack_message)
+    message_colour = get_message_colour(monzo_amount)
+    message = create_slack_message(monzo_merchant, monzo_amount, monzo_created, monzo_note, monzo_city, monzo_currency, monzo_receipt, message_colour)
+    
+    return {
+            "message": message
+        }
 
-def get_slack_colour(monzo_amount):
+def get_message_colour(monzo_amount):
 
     if monzo_amount >= float(amount_high):
-        slack_message_colour = '#ad0614'
+        message_colour = '#ad0614'
 
     elif monzo_amount >= float(amount_medium):
-        slack_message_colour = '#e2d43b'
+        message_colour = '#e2d43b'
 
     else:
-        slack_message_colour = '#7CD197'
+        message_colour = '#7CD197'
 
-    return(slack_message_colour)
+    return(message_colour)
 
-def create_slack_message(monzo_merchant, monzo_amount, monzo_created, monzo_note, monzo_city, monzo_currency, monzo_receipt, slack_message_colour):
+def create_slack_message(monzo_merchant, monzo_amount, monzo_created, monzo_note, monzo_city, monzo_currency, monzo_receipt, message_colour):
 
     current_date = (datetime.datetime.now()).strftime("%Y-%m-%d")
 
-    slack_message = {
+    message = {
         "icon_url": "https://github.com/twitter/twemoji/blob/gh-pages/72x72/1f4b0.png?raw=true",
         "username": "Expense",
         "channel": channel,
         "attachments": [{
             "pretext": "Monzo Expense Application",
-            "color": slack_message_colour,
+            "color": message_colour,
             "title": current_date + " " + monzo_merchant + " Expense",
             "title_link": "https://login.salesforce.com/?locale=uk",
             "footer": "Submit to Salesforce ASAP",
@@ -80,12 +76,4 @@ def create_slack_message(monzo_merchant, monzo_amount, monzo_created, monzo_note
             }
         ]}
 
-    return(slack_message)
-
-def send_slack_notification(slack_message):
-
-    response = requests.post(
-        slack_webhook, data=json.dumps(slack_message),
-        headers={"Content-Type": "application/json"},
-    )
-    response.raise_for_status()
+    return(message)

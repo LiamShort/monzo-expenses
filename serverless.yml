@@ -39,16 +39,17 @@ custom:
   config: ${file(${self:provider.stage}.yml), file(dev.yml)}
 
 functions: 
-  webhook:
-    handler: monspenso_webhook.lambda_handler
+  verify:
+    handler: monspenso_verify.lambda_handler
     description: Retreives Monzo message from API Gateway, if account details are correct invokes state machine.
     environment: 
       monzo_account_id: ${ssm:MonzoAccountID}
+      message_service: ${self:custom.config.message_service}
     memorySize: 128
     timeout: 300
 
-  category:
-    handler: monspenso_category.lambda_handler
+  request:
+    handler: monspenso_request.lambda_handler
     description: Retreives transaction details from Monzo.
     environment: 
       monzo_access_key: ${ssm:MonzoAccessKey}
@@ -57,12 +58,27 @@ functions:
   
   slack:
     handler: monspenso_slack.lambda_handler
-    description: Creates and sends Slack message containing purchase details. 
+    description: Creates Slack message containing purchase details. 
     environment:
       amount_high: ${self:custom.config.amount_high}
       amount_medium: ${self:custom.config.amount_medium}
-      channel: ${self:custom.config.channel}
-      slack_webhook: ${self:custom.config.slack_webhook}
+    memorySize: 128
+    timeout: 300
+
+  teams:
+    handler: monspenso_teams.lambda_handler
+    description: Creates Teams message containing purchase details. 
+    environment:
+      amount_high: ${self:custom.config.amount_high}
+      amount_medium: ${self:custom.config.amount_medium}
+    memorySize: 128
+    timeout: 300
+
+  send:
+    handler: monspenso_send.lambda_handler
+    description: Sends message to webhook url.
+    environment:
+      webhook_url: ${self:custom.config.webhook_url}
     memorySize: 128
     timeout: 300
 
@@ -71,16 +87,17 @@ stepFunctions:
     MonzoTransactions:
       events:
         - http:
-            path: test/monspenso_webhook
+            path: test/monspenso_verify
             method: POST
       name: MonzoTransactions
       definition:
         Comment: "Monspenso Application"
-        StartAt: webhook
+        StartAt: verify
         States:
-          webhook:
+
+          verify:
             Type: Task
-            Resource: "arn:aws:lambda:eu-west-1:${self:custom.config.aws_account_id}:function:monspenso-dev-webhook"
+            Resource: "arn:aws:lambda:eu-west-1:${self:custom.config.aws_account_id}:function:monspenso-dev-verify"
             ResultPath: $
             Next: account_id
 
@@ -93,31 +110,61 @@ stepFunctions:
             - Variable: "$.valid"
               BooleanEquals: false
               Next: invalid_account
+            Default: "invalid_account"
+
           invalid_account:
             Type: Fail
             Cause: Invalid Monzo AccountID
+
           wait:
             Type: Wait
             Seconds: 30
-            Next: category
-          category:
+            Next: request
+
+          request:
             Type: Task
-            Resource: "arn:aws:lambda:eu-west-1:${self:custom.config.aws_account_id}:function:monspenso-dev-category"
+            Resource: "arn:aws:lambda:eu-west-1:${self:custom.config.aws_account_id}:function:monspenso-dev-request"
             ResultPath: $
             Next: expense
+
           expense:
             Type: Choice
             Choices:
             - Variable: "$.data.category"
               StringEquals: expenses
-              Next: slack
+              Next: service
             Default: "non_expense"
+
+          service:
+            Type: Choice
+            Choices:
+            - Variable: "$.message_service"
+              StringEquals: slack
+              Next: slack
+            - Variable: "$.message_service"
+              StringEquals: teams
+              Next: teams
+            Default: "non_expense"
+
           non_expense:
             Type: Fail
             Cause: Not marked as expense
+
           slack:
             Type: Task
             Resource: "arn:aws:lambda:eu-west-1:${self:custom.config.aws_account_id}:function:monspenso-dev-slack"
+            ResultPath: $
+            Next: send
+          
+          teams:
+            Type: Task
+            Resource: "arn:aws:lambda:eu-west-1:${self:custom.config.aws_account_id}:function:monspenso-dev-teams"
+            ResultPath: $
+            Next: send
+
+          send:
+            Type: Task
+            Resource: "arn:aws:lambda:eu-west-1:${self:custom.config.aws_account_id}:function:monspenso-dev-send"
             ResultPath: $
             End: true
 
