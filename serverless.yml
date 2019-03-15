@@ -34,6 +34,11 @@ provider:
         - ssm:GetParameter
       Resource: 
         - "*"
+    - Effect: "Allow"
+      Action:
+        - s3:PutObject
+      Resource: 
+        - "*"
 
 custom:
   config: ${file(${self:provider.stage}.yml), file(dev.yml)}
@@ -53,6 +58,14 @@ functions:
     description: Retreives transaction details from Monzo.
     environment: 
       monzo_access_key: ${ssm:MonzoAccessKey}
+    memorySize: 128
+    timeout: 300
+
+  receipt:
+    handler: monspenso_receipt.lambda_handler
+    description: Uploads image to S3.
+    environment: 
+      bucket_name: ${self:custom.config.bucket_name}
     memorySize: 128
     timeout: 300
   
@@ -124,6 +137,12 @@ stepFunctions:
           request:
             Type: Task
             Resource: "arn:aws:lambda:eu-west-1:${self:custom.config.aws_account_id}:function:monspenso-dev-request"
+            ResultPath: $
+            Next: receipt
+          
+          receipt:
+            Type: Task
+            Resource: "arn:aws:lambda:eu-west-1:${self:custom.config.aws_account_id}:function:monspenso-dev-receipt"
             ResultPath: $
             Next: expense
 

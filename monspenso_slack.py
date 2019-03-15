@@ -51,8 +51,6 @@ def get_message_colour(monzo_amount):
 
 def create_slack_message(monzo_merchant, monzo_amount, monzo_created, monzo_note, monzo_city, monzo_currency, monzo_receipt, message_colour):
 
-    current_date = (datetime.datetime.now()).strftime("%Y-%m-%d")
-
     message = {
         "icon_url": "https://github.com/twitter/twemoji/blob/gh-pages/72x72/1f4b0.png?raw=true",
         "username": "Expense",
@@ -60,7 +58,7 @@ def create_slack_message(monzo_merchant, monzo_amount, monzo_created, monzo_note
         "attachments": [{
             "pretext": "Monzo Expense Application",
             "color": message_colour,
-            "title": current_date + " " + monzo_merchant + " Expense",
+            "title": monzo_merchant + " Expense",
             "title_link": "https://login.salesforce.com/?locale=uk",
             "footer": "Submit to Salesforce ASAP",
             "fields": [
