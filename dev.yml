@@ -1,7 +1,8 @@
 profile: 
 aws_account_id: 
-region: 
+region: eu-west-1
 amount_high: 100
 amount_medium: 40
-channel: 
-slack_webhook: 
+channel: expenses
+message_service: slack / teams
+webhook_url: 
